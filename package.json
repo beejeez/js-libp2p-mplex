@@ -46,7 +46,7 @@
     "aegir": "^33.1.0",
     "cborg": "^1.2.1",
     "iso-random-stream": "^2.0.0",
-    "libp2p-interfaces": "^0.10.0",
+    "libp2p-interfaces": "github:libp2p/js-libp2p-interfaces#feat/muxed-stream-close-read-and-write",
     "p-defer": "^3.0.0",
     "random-int": "^2.0.0",
     "streaming-iterables": "^5.0.4",
@@ -54,7 +54,7 @@
   },
   "dependencies": {
     "abort-controller": "^3.0.0",
-    "abortable-iterator": "^3.0.0",
+    "abortable-iterator": "git+https://github.com/beejeez/abortable-iterator.git",
     "bl": "^5.0.0",
     "debug": "^4.3.1",
     "err-code": "^3.0.1",

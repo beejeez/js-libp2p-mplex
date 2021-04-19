@@ -11,6 +11,7 @@ const { InitiatorMessageTypes, ReceiverMessageTypes } = require('./message-types
 
 const ERR_MPLEX_STREAM_RESET = 'ERR_MPLEX_STREAM_RESET'
 const ERR_MPLEX_STREAM_ABORT = 'ERR_MPLEX_STREAM_ABORT'
+const MPLEX_WRITE_STREAM_CLOSED = 'MPLEX_WRITE_STREAM_CLOSED'
 
 /**
  * @param {object} options
@@ -25,6 +26,7 @@ const ERR_MPLEX_STREAM_ABORT = 'ERR_MPLEX_STREAM_ABORT'
 module.exports = ({ id, name, send, onEnd = () => {}, type = 'initiator', maxMsgSize = MAX_MSG_SIZE }) => {
   const abortController = new AbortController()
   const resetController = new AbortController()
+  const writeCloseController = new AbortController()
   const Types = type === 'initiator' ? InitiatorMessageTypes : ReceiverMessageTypes
   const externalId = type === 'initiator' ? (`i${id}`) : `r${id}`
 
@@ -58,7 +60,13 @@ module.exports = ({ id, name, send, onEnd = () => {}, type = 'initiator', maxMsg
 
   const stream = {
     // Close for reading
-    close: () => stream.source.end(),
+    close: () => Promise.all([
+      stream.closeRead(),
+      stream.closeWrite()
+    ]),
+    closeRead: () => stream.source.end(),
+    // Close for writing
+    closeWrite: () => writeCloseController.abort(),
     // Close for reading and writing (local error)
     abort: err => {
       log('%s stream %s abort', type, name, err)
@@ -77,7 +85,8 @@ module.exports = ({ id, name, send, onEnd = () => {}, type = 'initiator', maxMsg
     sink: async source => {
       source = abortable(source, [
         { signal: abortController.signal, options: { abortMessage: 'stream aborted', abortCode: ERR_MPLEX_STREAM_ABORT } },
-        { signal: resetController.signal, options: { abortMessage: 'stream reset', abortCode: ERR_MPLEX_STREAM_RESET } }
+        { signal: resetController.signal, options: { abortMessage: 'stream reset', abortCode: ERR_MPLEX_STREAM_RESET } },
+        { signal: writeCloseController.signal, options: { abortMessage: 'write stream closed', abortCode: MPLEX_WRITE_STREAM_CLOSED } }
       ])
 
       if (type === 'initiator') { // If initiator, open a new stream
@@ -97,16 +106,18 @@ module.exports = ({ id, name, send, onEnd = () => {}, type = 'initiator', maxMsg
           }
         }
       } catch (err) {
-        // Send no more data if this stream was remotely reset
-        if (err.code === ERR_MPLEX_STREAM_RESET) {
-          log('%s stream %s reset', type, name)
-        } else {
-          log('%s stream %s error', type, name, err)
-          send({ id, type: Types.RESET })
-        }
+        if (err.code !== MPLEX_WRITE_STREAM_CLOSED) {
+          // Send no more data if this stream was remotely reset
+          if (err.code === ERR_MPLEX_STREAM_RESET) {
+            log('%s stream %s reset', type, name)
+          } else {
+            log('%s stream %s error', type, name, err)
+            send({ id, type: Types.RESET })
+          }
 
-        stream.source.end(err)
-        return onSinkEnd(err)
+          stream.source.end(err)
+          return onSinkEnd(err)
+        }
       }
 
       send({ id, type: Types.CLOSE })

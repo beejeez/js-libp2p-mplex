@@ -117,6 +117,9 @@ class Mplex {
     }
     log('new %s stream %s %s', type, id, name)
     const send = msg => {
+      if (!registry.has(id)) {
+        throw errCode(new Error('the stream is not in the muxer registry, it may have already been closed'), 'ERR_STREAM_DOESNT_EXIST')
+      }
       if (log.enabled) {
         log('%s stream %s %s send', type, id, name, { ...msg, type: MessageTypeNames[msg.type], data: msg.data && msg.data.slice() })
       }
@@ -220,7 +223,7 @@ class Mplex {
         break
       case MessageTypes.CLOSE_INITIATOR:
       case MessageTypes.CLOSE_RECEIVER:
-        stream.close()
+        stream.closeRead()
         break
       case MessageTypes.RESET_INITIATOR:
       case MessageTypes.RESET_RECEIVER:
